@@ -1,0 +1,5 @@
+[package]
+name = "vcfdedup"
+version = "0.1.0"
+authors = ["Maximilian Fricke <mfricke2808@gmail.com>"]
+edition = "2018"
