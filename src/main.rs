@@ -1,5 +1,3 @@
-#![allow(warnings)]
-
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::error;
@@ -30,7 +28,7 @@ fn usage() {
     println!("usage: vcfdedup <vcf>");
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 struct VcardEntry {
     lines: Vec<String>,
 }
@@ -41,7 +39,7 @@ impl VcardEntry {
     }
 
     fn push(&mut self, s: &str) {
-        assert!(s.starts_with(" ") || self.lines.is_empty());
+        assert!(s.starts_with(' ') || self.lines.is_empty());
         self.lines.push(s.to_owned());
     }
 
@@ -71,6 +69,16 @@ impl Vcard {
 
     fn insert(&mut self, e: VcardEntry) {
         self.content.insert(e);
+    }
+
+    fn extend(&mut self, other: &Vcard) {
+        for e in &other.content {
+            self.content.insert(e.clone());
+        }
+    }
+
+    fn get(&self, key: &str) -> Option<&VcardEntry> {
+        self.content.iter().find(|e| e.lines[0].starts_with(key))
     }
 
     fn print(&self) {
@@ -159,7 +167,7 @@ impl Parser {
         let mut entry = VcardEntry::new();
         entry.push(self.lines[self.cur_idx].as_str());
         self.cur_idx += 1;
-        while self.lines[self.cur_idx].starts_with(" ") {
+        while self.lines[self.cur_idx].starts_with(' ') {
             entry.push(self.lines[self.cur_idx].as_str());
             self.cur_idx += 1;
         }
@@ -175,11 +183,23 @@ fn main() -> Result<()> {
         return Err(Box::new(Error::Usage));
     }
 
-    let input = fs::read_to_string(infile.unwrap())?;
-    let mut parser = Parser::new(input);
-    let cards = parser.parse()?;
+    let cards = {
+        let input = fs::read_to_string(infile.unwrap())?;
+        let parser = Parser::new(input);
+        parser.parse()?
+    };
 
-    for c in &cards {
+    let mut collection: HashMap<VcardEntry, Vcard> = HashMap::new();
+    for c in cards {
+        if let Some(name) = c.get("N") {
+            collection
+                .entry(name.clone())
+                .and_modify(|e| e.extend(&c))
+                .or_insert(c);
+        }
+    }
+
+    for c in collection.values() {
         println!("BEGIN:VCARD");
         println!("{}", c.version);
         c.print();
